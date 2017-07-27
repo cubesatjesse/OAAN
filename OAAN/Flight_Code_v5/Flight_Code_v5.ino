@@ -24,7 +24,8 @@ class masterStatus {
     //it is important that as few of these variables as possible get arbitrarily assigned a value.
     // these should only be given real data
 
-    // change final string to binary. get bytes. find upper and lower limits. round floats and set value for maxes (like MAX)
+    // change final string to binary. get bytes.
+    // find upper and lower limits. round floats and set value for maxes (like MAX)
 
     int State;
     int NextState;
@@ -578,6 +579,27 @@ void downLink() {
   Serial.println (micros() - i);
   Serial.println (msg);
 
+}
+
+void sendSCommand(String data) {
+  //Send Command to Slave Core
+  //Serial.print("Command Sent to Slave: <");
+  //Serial.println(data + ">");
+  char com[data.length() + 1];
+  data.toCharArray(com, data.length() + 1);
+  if (WireConnected) {
+    Wire.beginTransmission(11); // transmit to device #8
+    Wire.write(com);   // sends String
+    Wire.endTransmission();    // stop transmitting
+  }
+}
+
+void sectionReadToValue(String s, int * data, int dataSize) {
+  //Convert Array of Strings <s> to Array of ints <data> with size <dataSize>
+  for (int i = 0; i < dataSize; i++) {
+    data[i] = (s.substring(0, s.indexOf(','))).toInt();
+    s = s.substring(s.indexOf(',') + 1);
+  }
 }
 
 

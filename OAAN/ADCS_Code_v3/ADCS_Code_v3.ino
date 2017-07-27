@@ -1,16 +1,3 @@
-/*
-   TODO calibrate while detumbling may be a problem?
-   V2 Added noise cancling. data is fairly clean now but approach is quite manual. I suspect the random values
-   the IMU jumps to vary between model. these false readings can come 2 or 3 in a row.
-   how can we prepare the spacecraft for an abscence of data that long
-
-   two (or more) noise values per data stream. 9 streams means 18 if statments and 9 switches per read...
-   the other option is buy many imu's and select the best ones. (may entirely solve noise problem)
-   it's a legitimate practice in tranzistor manufacturing. these definitely arent transistors though.
-
-
-   log every crazy value. if too many per thousand updates restart?
-*/
 
 
 
@@ -21,6 +8,7 @@ MPU9250 myIMU;
 
 long int i = 0; //number of imu reads
 String lr = ""; //last sensor read
+String WireRead = "";
 
 void setup()
 {
@@ -61,14 +49,19 @@ void setup()
 }
 
 void loop() {
-  //Serial.println (i);
-  i++;
-  delay(50);
-  myIMU.updateTime();
-  myIMU.delt_t = millis() - myIMU.count;
-  if (myIMU.delt_t > 500) {
-    ToString();
-  }
+
+if (Wire.available()) {
+WireRead += Wire.read;
+}
+
+//Serial.println (i);
+//  i++;
+//  delay(50);
+//  myIMU.updateTime();
+//  myIMU.delt_t = millis() - myIMU.count;
+//  if (myIMU.delt_t > 500) {
+//    ToString();
+//  }
 }
 
 String ToString()
@@ -195,22 +188,29 @@ String ToString()
   //        Serial.print(" qx = "); Serial.print(*(getQ() + 1));
   //        Serial.print(" qy = "); Serial.print(*(getQ() + 2));
   //        Serial.print(" qz = "); Serial.println(*(getQ() + 3));
-
-
-  // Define output variables from updated quaternion---these are Tait-Bryan
-  // angles, commonly used in aircraft orientation. In this coordinate system,
-  // the positive z-axis is down toward Earth. Yaw is the angle between Sensor
-  // x-axis and Earth magnetic North (or true North if corrected for local
-  // declination, looking down on the sensor positive yaw is counterclockwise.
-  // Pitch is angle between sensor x-axis and Earth ground plane, toward the
-  // Earth is positive, up toward the sky is negative. Roll is angle between
-  // sensor y-axis and Earth ground plane, y-axis up is positive roll. These
-  // arise from the definition of the homogeneous rotation matrix constructed
-  // from quaternions. Tait-Bryan angles as well as Euler angles are
-  // non-commutative; that is, the get the correct orientation the rotations
-  // must be applied in the correct order which for this configuration is yaw,
-  // pitch, and then roll.
-  // For more see
-  // http://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-  // which has additional links.
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  

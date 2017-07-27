@@ -16,8 +16,6 @@ void setup() {
   ////////////////////////////////////////////////////////////
 
 
-  // this is partially broken for no reason... fix tomorrow :)
-
 }
 class commandBuffer {
   public:
