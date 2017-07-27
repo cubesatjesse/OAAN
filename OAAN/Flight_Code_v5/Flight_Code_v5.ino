@@ -313,12 +313,31 @@ void commandParse() {
 
 
 void recvWithEndMarker() {
+  // for serial0
   static byte ndx = 0;
   char endMarker = '\n';
   char rc;
 
-  while (Serial.available() > 0 && newData == false) {
+  while ( Serial.available() > 0 && newData == false) {
     rc = Serial.read();
+
+    if (rc != endMarker) {
+      receivedChars += (char(rc));
+    }
+    else {
+      newData = true;
+    }
+  }
+}
+
+void recvWithEndMarker1() {
+  // for serial0
+  static byte ndx = 0;
+  char endMarker = '\n';
+  char rc;
+
+  while ( Serial1.available() > 0 && newData == false) {
+    rc = Serial1.read();
 
     if (rc != endMarker) {
       receivedChars += (char(rc));
@@ -446,9 +465,25 @@ void popCommands() {
         case (1):
           downLink();
           break;
+          
         case (2):
+          Serial1.print(F("2,3!\n")); // <---found the secret to serial1 :)
+          break;
+          
+        case (3):
+          Serial1.println("5,3!");
           break;
 
+        case (4):
+          pinMode(13, OUTPUT);
+          digitalWrite(13, HIGH);
+          break;
+          
+        case (5):
+          pinMode(13, OUTPUT);
+          digitalWrite(13, LOW);
+          break;
+          
         case (20): // 20 downlink commands
           MSH.SRFreq = currentCommand[1];
           break;
@@ -504,6 +539,7 @@ void popCommands() {
 void setup() {
   //initialize
   Serial.begin (19200);
+  Serial1.begin (19200);
   Wire.begin();
   cBuf = commandBuffer();
 }
@@ -513,9 +549,11 @@ void loop() {
   popCommands();
 
   recvWithEndMarker();
+  recvWithEndMarker1();
   //tenatively working
   if (newData) {
-    if ((isInputValid()) && (receivedChars != "")) {
+    Serial.println(receivedChars);
+    if (isInputValid() && (receivedChars != "")) {
       commandParse();
     }
     newData = false;
@@ -579,19 +617,8 @@ void downLink() {
   Serial.println (micros() - i);
   Serial.println (msg);
 
-}
+  //radiotransmit thing(msg); todo
 
-void sendSCommand(String data) {
-  //Send Command to Slave Core
-  //Serial.print("Command Sent to Slave: <");
-  //Serial.println(data + ">");
-  char com[data.length() + 1];
-  data.toCharArray(com, data.length() + 1);
-  if (WireConnected) {
-    Wire.beginTransmission(11); // transmit to device #8
-    Wire.write(com);   // sends String
-    Wire.endTransmission();    // stop transmitting
-  }
 }
 
 void sectionReadToValue(String s, int * data, int dataSize) {
@@ -602,41 +629,28 @@ void sectionReadToValue(String s, int * data, int dataSize) {
   }
 }
 
-bool requestFromSlave() {
+void UpdateSensors() {
   String res = "";
-  bool success = false;
-  {
-    Wire.requestFrom(11, 40, true); // request 10 bytes from slave device #8
-    //delay(50);
-    int endTime = millis() + manualTimeout;
-    //Serial.println("Here");
+  int data[12];
+  sectionReadToValue(res, data, 12);
+  //imu values
+  MSH.Gyro[1] = data[1];
+  MSH.Gyro[2] = data[2];
+  MSH.Gyro[3] = data[3];
+  MSH.Mag[1] = data[4];
+  MSH.Mag[2] = data[5];
+  MSH.Mag[3] = data[6];
+  MSH.Accel[1] = data[7];
+  MSH.Accel[2] = data[8];
+  MSH.Accel[3] = data[9];
 
-    //Read and Reformat
-    //  ADCS_Active;
-    if (Wire.available()) {
-      success = true;
-    }
-    String res = "";
-    while (Wire.available()) {
-      res += (char)Wire.read();
-    }
-    res = res.substring(0, res.indexOf('|'));
-    int data[12];
-    sectionReadToValue(res, data, 12);
-    //imu values
-    MSH.Gyro[1] = data[1];
-    MSH.Gyro[2] = data[2];
-    MSH.Gyro[3] = data[3];
-    MSH.Mag[1] = data[4];
-    MSH.Mag[2] = data[5];
-    MSH.Mag[3] = data[6];
-    MSH.Accel[1] = data[7];
-    MSH.Accel[2] = data[8];
-    MSH.Accel[3] = data[9];
-  }
+  //todo there will be many more uforseeable values for this (change 12 if needed)
 
-  return success;
 }
+
+
+
+
 
 
 ////////////////////////////////////////////////////////////////////////////
