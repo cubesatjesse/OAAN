@@ -448,42 +448,42 @@ void popCommands() {
           break;
         case (2):
           break;
-          
+
         case (20): // 20 downlink commands
           MSH.SRFreq = currentCommand[1];
           break;
-          
+
         case (21):
           break;
-          
+
         case (22):
           break;
-          
+
         case (80): // 80 gyro commands
           MSH.XGyroThresh = currentCommand[1];
           MSH.StageReport = true;
           break;
-          
+
         case (81):
           MSH.YGyroThresh = currentCommand[1];
           MSH.StageReport = true;
           break;
-          
+
         case (82):
           MSH.ZGyroThresh = currentCommand[1];
           MSH.StageReport = true;
           break;
-          
+
         case (90): // 90 accelerometer commands
           MSH.XAccelThresh = currentCommand[1];
           MSH.StageReport = true;
           break;
-          
+
         case (91):
           MSH.YAccelThresh = currentCommand[1];
           MSH.StageReport = true;
           break;
-          
+
         case (92):
           MSH.ZAccelThresh = currentCommand[1];
           MSH.StageReport = true;
@@ -602,6 +602,45 @@ void sectionReadToValue(String s, int * data, int dataSize) {
   }
 }
 
+bool requestFromSlave() {
+  String res = "";
+  bool success = false;
+  {
+    Wire.requestFrom(11, 40, true); // request 10 bytes from slave device #8
+    //delay(50);
+    int endTime = millis() + manualTimeout;
+    //Serial.println("Here");
+
+    //Read and Reformat
+    //  ADCS_Active;
+    if (Wire.available()) {
+      success = true;
+    }
+    String res = "";
+    while (Wire.available()) {
+      res += (char)Wire.read();
+    }
+    res = res.substring(0, res.indexOf('|'));
+    int data[12];
+    sectionReadToValue(res, data, 12);
+    MSH.TorqueXDir = data[3];
+    MSH.CurYDir = data[4];
+    MSH.CurZDir = data[5];
+    MSH.CurXPWM = data[6];
+    MSH.CurYPWM = data[7];
+    MSH.CurZPWM = data[8];
+    if (data[9] - MSH.numPhotos) {
+      Serial.println("\n" + String(data[9] - MSH.numPhotos) + " Photos Taken");
+    }
+    MSH.numPhotos = data[9];
+    MSH.CameraStatus = data[10];
+    MSH.CameraBurst = data[11];
+    break;
+  }
+
+  return success;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////
 ////////////////Sensor Functions////////////////////////////////////////////
@@ -609,26 +648,26 @@ void sectionReadToValue(String s, int * data, int dataSize) {
 
 
 bool checkSpin() {
-//return true if spin rate exceeds threshold
+  //return true if spin rate exceeds threshold
 
 
-// option 1:
-//less control but faster and much more simple
+  // option 1:
+  //less control but faster and much more simple
 
-//float totRot = MSH.
+  //float totRot = MSH.
 
-// option 2:
-// more involved and slower. also more variables to keep track of
-// individualy set and check each threshold. probably not necessary
+  // option 2:
+  // more involved and slower. also more variables to keep track of
+  // individualy set and check each threshold. probably not necessary
 
 }
 
 float getAverage(float x, float y, float z) {
-// plug this into an accumulator
+  // plug this into an accumulator
 
-float ave = (x + y + z); //take sum
-ave = (ave / 3);
-return ave;
+  float ave = (x + y + z); //take sum
+  ave = (ave / 3);
+  return ave;
 }
 
 

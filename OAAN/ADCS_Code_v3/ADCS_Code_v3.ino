@@ -50,18 +50,16 @@ void setup()
 
 void loop() {
 
-if (Wire.available()) {
-WireRead += Wire.read;
-}
 
-//Serial.println (i);
-//  i++;
-//  delay(50);
-//  myIMU.updateTime();
-//  myIMU.delt_t = millis() - myIMU.count;
-//  if (myIMU.delt_t > 500) {
-//    ToString();
-//  }
+
+Serial.println (i);
+  i++;
+  delay(50);
+  myIMU.updateTime();
+  myIMU.delt_t = millis() - myIMU.count;
+  if (myIMU.delt_t > 500) {
+    ToString();
+  }
 }
 
 String ToString()
