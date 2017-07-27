@@ -623,19 +623,16 @@ bool requestFromSlave() {
     res = res.substring(0, res.indexOf('|'));
     int data[12];
     sectionReadToValue(res, data, 12);
-    MSH.TorqueXDir = data[3];
-    MSH.CurYDir = data[4];
-    MSH.CurZDir = data[5];
-    MSH.CurXPWM = data[6];
-    MSH.CurYPWM = data[7];
-    MSH.CurZPWM = data[8];
-    if (data[9] - MSH.numPhotos) {
-      Serial.println("\n" + String(data[9] - MSH.numPhotos) + " Photos Taken");
-    }
-    MSH.numPhotos = data[9];
-    MSH.CameraStatus = data[10];
-    MSH.CameraBurst = data[11];
-    break;
+    //imu values
+    MSH.Gyro[1] = data[1];
+    MSH.Gyro[2] = data[2];
+    MSH.Gyro[3] = data[3];
+    MSH.Mag[1] = data[4];
+    MSH.Mag[2] = data[5];
+    MSH.Mag[3] = data[6];
+    MSH.Accel[1] = data[7];
+    MSH.Accel[2] = data[8];
+    MSH.Accel[3] = data[9];
   }
 
   return success;
