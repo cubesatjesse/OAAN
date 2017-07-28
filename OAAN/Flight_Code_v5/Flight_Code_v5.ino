@@ -1,10 +1,15 @@
-
+///////// need Serial code to be decimal friendy
 
 #include <Wire.h>
 
 
 unsigned long manualTimeout = 10 * 1000;
 int endT = 0;
+
+const int SenseNumb = 5; //change number of data samples in averaging array
+bool SensUpdate = false; //is there fresh IMU data
+bool IMUBufferFull = false; //must fill w/ data before averages can be taken
+int SenseCounter = 0;
 
 bool WireConnected = true;
 boolean newData = false;
@@ -45,6 +50,15 @@ class masterStatus {
     float Mag[3];
     float Gyro[3];
     float Accel[3];
+
+    float MagAve[3];
+    float GyroAve[3];
+    float AccelAve[3];
+
+    float MagLog[3][SenseNumb];
+    float GyroLog[3][SenseNumb];
+    float AccelLog[3][SenseNumb];
+
     int TempAcc;
     int ImuTemp;
     // may need to store the zeros aswell.
@@ -343,11 +357,10 @@ void recvWithEndMarker1() {
       receivedChars += (char(rc));
     }
     else {
-      newData = true;
+      commandParse();
     }
   }
 }
-
 
 boolean isInputValid() {
   // todo make timeout
@@ -465,25 +478,33 @@ void popCommands() {
         case (1):
           downLink();
           break;
-          
+
         case (2):
-          Serial1.print(F("2,3!\n")); // <---found the secret to serial1 :)
+          Serial1.print(F("2,3!\n")); // <---found the secret to Serial1 :)
           break;
-          
+
         case (3):
           Serial1.println("5,3!");
           break;
 
         case (4):
-          pinMode(13, OUTPUT);
-          digitalWrite(13, HIGH);
+          takeAverage();
+          Serial.print("Magnetometer X:"); Serial.print(MSH.MagAve[0]);
+          Serial.print(" Y:");  Serial.print(MSH.MagAve[1]);
+          Serial.print(" Z:"); Serial.println(MSH.MagAve[2]);
+          Serial.print("Gyroscope X:"); Serial.print(MSH.GyroAve[0]);
+          Serial.print(" Y:");  Serial.print(MSH.GyroAve[1]);
+          Serial.print(" Z:"); Serial.println(MSH.GyroAve[2]);
+          Serial.print("Accelerometer X:"); Serial.print(MSH.AccelAve[0]);
+          Serial.print(" Y:");  Serial.print(MSH.AccelAve[1]);
+          Serial.print(" Z:"); Serial.println(MSH.AccelAve[2]);
           break;
-          
+
         case (5):
           pinMode(13, OUTPUT);
           digitalWrite(13, LOW);
           break;
-          
+
         case (20): // 20 downlink commands
           MSH.SRFreq = currentCommand[1];
           break;
@@ -523,6 +544,45 @@ void popCommands() {
           MSH.ZAccelThresh = currentCommand[1];
           MSH.StageReport = true;
           break;
+
+        case (100): // slave commands (this terminology is really due for an update)
+          MSH.Gyro[0] = currentCommand[1];
+          break;
+
+        case (101):
+          MSH.Gyro[1] = currentCommand[1];
+          break;
+
+        case (102):
+          MSH.Gyro[2] = currentCommand[1];
+          break;
+
+        case (103):
+          MSH.Mag[0] = currentCommand[1];
+          break;
+
+        case (104):
+          MSH.Mag[1] = currentCommand[1];
+          break;
+
+        case (105):
+          MSH.Mag[2] = currentCommand[1];
+          break;
+
+        case (106):
+          MSH.Accel[0] = currentCommand[1];
+          break;
+
+        case (107):
+          MSH.Accel[1] = currentCommand[1];
+          break;
+
+        case (108):
+          MSH.Accel[2] = currentCommand[1];
+          break;
+
+        case (109):
+          SensUpdate = true;
       }
     } else {
       Serial.println("No Command");
@@ -547,7 +607,6 @@ void setup() {
 void loop() {
   //  wait 1 "tick" unit of time between sensor updates + new commands
   popCommands();
-
   recvWithEndMarker();
   recvWithEndMarker1();
   //tenatively working
@@ -560,8 +619,22 @@ void loop() {
     Serial.println("wiping serial buffer");
     receivedChars = "";
   }
-  //delay(1000);
-  //downLink();
+
+  //updateSensors();
+
+  if (SensUpdate) {
+
+    if (!IMUBufferFull) {
+      fillIMUBuffer();
+    }
+    else {
+      buildIMULog();
+      cBuf.commandStack[cBuf.openSpot][0] = 4;
+      cBuf.commandStack[cBuf.openSpot][1] = 11;
+      cBuf.openSpot++;
+    }
+  }
+
 }
 
 
@@ -613,10 +686,6 @@ void downLink() {
     MSH.StageReport = false;
     MSH.lastSR = 0;
   }
-  //Serial.print ("Time:");
-  Serial.println (micros() - i);
-  Serial.println (msg);
-
   //radiotransmit thing(msg); todo
 
 }
@@ -629,26 +698,6 @@ void sectionReadToValue(String s, int * data, int dataSize) {
   }
 }
 
-void UpdateSensors() {
-  String res = "";
-  int data[12];
-  sectionReadToValue(res, data, 12);
-  //imu values
-  MSH.Gyro[1] = data[1];
-  MSH.Gyro[2] = data[2];
-  MSH.Gyro[3] = data[3];
-  MSH.Mag[1] = data[4];
-  MSH.Mag[2] = data[5];
-  MSH.Mag[3] = data[6];
-  MSH.Accel[1] = data[7];
-  MSH.Accel[2] = data[8];
-  MSH.Accel[3] = data[9];
-
-  //todo there will be many more uforseeable values for this (change 12 if needed)
-
-}
-
-
 
 
 
@@ -656,6 +705,28 @@ void UpdateSensors() {
 ////////////////////////////////////////////////////////////////////////////
 ////////////////Sensor Functions////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////
+
+void updateSensors() {
+  float data[12];
+  for (int g = 0; g <= 12; g++) {
+    data[g] = random(500, 800);
+  }
+  //sectionReadToValue(res, data, 12);
+  //imu values
+  MSH.Gyro[0] = data[1];
+  MSH.Gyro[1] = data[2];
+  MSH.Gyro[2] = data[3];
+  MSH.Mag[0] = data[4];
+  MSH.Mag[1] = data[5];
+  MSH.Mag[2] = data[6];
+  MSH.Accel[0] = data[7];
+  MSH.Accel[1] = data[8];
+  MSH.Accel[2] = data[9];
+  SensUpdate = true;
+  //todo there will be many more uforseeable values for this (change 12 if needed)
+
+}
+
 
 
 bool checkSpin() {
@@ -674,11 +745,78 @@ bool checkSpin() {
 }
 
 float getAverage(float x, float y, float z) {
-  // plug this into an accumulator
+  // might just delete this. its pretty useless tbh :)
 
   float ave = (x + y + z); //take sum
   ave = (ave / 3);
   return ave;
+}
+
+void fillIMUBuffer() {
+  if (SenseCounter <= SenseNumb) {
+
+    for (int j = 0; j < 3; j++) {
+      MSH.MagLog[j][SenseCounter] = MSH.Mag[j];
+      MSH.GyroLog[j][SenseCounter] = MSH.Gyro[j];
+      MSH.AccelLog[j][SenseCounter] = MSH.Accel[j];
+    }
+    SenseCounter++;
+  }
+  else {
+    IMUBufferFull = true;
+  }
+  SensUpdate = false;
+}
+
+void takeAverage() {
+  //take each value from the imu log and build average
+
+  float MAverage[3] = {0, 0, 0};
+  float GAverage[3] = {0, 0, 0};
+  float AAverage[3] = {0, 0, 0};
+
+  for (int i = 0; i < SenseNumb; i++) {
+    for (int j = 0; j < 3; j++) {
+
+      MAverage[j] += MSH.MagLog[j][i];
+      GAverage[j] += MSH.GyroLog[j][i];
+      AAverage[j] += MSH.AccelLog[j][i];
+
+    }//close for i
+
+  }//close for j
+
+  for (int j = 0; j < 3; j++) {
+    MAverage[j] = MAverage[j] / SenseNumb;
+    GAverage[j] = GAverage[j] / SenseNumb;
+    AAverage[j] = AAverage[j] / SenseNumb;
+
+    MSH.MagAve[j] = MAverage[j];
+    MSH.GyroAve[j] = GAverage[j];
+    MSH.AccelAve[j] = AAverage[j];
+
+  }
+}
+
+void buildIMULog() {
+
+  for (int i = (SenseNumb - 1); i >= 0; i--) {
+
+    for (int j = 0; j < 3; j++) {
+      if (j == 0) {
+        MSH.MagLog[j][i] = MSH.Mag[j];
+        MSH.GyroLog[j][i] = MSH.Gyro[j];
+        MSH.AccelLog[j][i] = MSH.Accel[j];
+      }
+      if (j != 0) {
+        MSH.MagLog[j][i] = MSH.MagLog[j][i - 1];
+        MSH.GyroLog[j][i] = MSH.GyroLog[j][i - 1];
+        MSH.AccelLog[j][i] = MSH.AccelLog[j][i - 1];
+      }
+    }//close for i
+
+  }//close for j
+
 }
 
 
