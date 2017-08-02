@@ -1,4 +1,5 @@
 ///////// need Serial code to be decimal friendy
+///////// clean up IMU stuff
 
 #include <Wire.h>
 
@@ -44,6 +45,21 @@ class masterStatus {
     int XAccelThresh;
     int YAccelThresh;
     int ZAccelThresh;
+
+        //ROCKBLOCK Message Variables
+    bool AttemptingLink; //True if waiting for SBDIX to return
+    bool MessageStaged; //True if message waiting in Mobile Originated Buffer
+    int RBCheckType; //State of Outgoing Communication with RockBlock. 0=ping, 1=Send SBDIX, 2=Fetch Incomming Command
+    int MOStatus; //0 if No Outgoing message, 1 if outgoing message success, 2 if error
+    int MOMSN; //Outgoing Message #
+    int MTStatus; //0 if No Incoming message, 1 if Incoming message success, 2 if error
+    int MTMSN; //Incoming Message #
+    int MTLength; //Incoming Message Length in bytes
+    int MTQueued; //# of messages waiting in iridium
+    String SBDRT;
+    int LastMsgType; //0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready //TODO
+    int LastSMsgType; //Only Update on NON EMPTY reads from RB: 0 = inval, 1 = ok, 2 = ring, 3 = error, 4 = ready //TODO
+    int SBDIXFails;
 
     // todo accumulated or raw data?
     //  get all the min max vals/percision
@@ -278,8 +294,6 @@ commandBuffer cBuf;
 
 
 void commandParse() {
-  //appears to be working...
-  //I haven't changed anything so im still suspicious
 
   int commandData;
   int commandType;
@@ -288,36 +302,20 @@ void commandParse() {
   i = receivedChars;
 
   while (l) {
-    //    Serial.print ("i:");
-    //    Serial.println (i);
-    //    Serial.println (receivedChars);
+
     commandType = (receivedChars.substring(0, receivedChars.indexOf(","))).toInt();
-    //    Serial.println (receivedChars);
-    //    Serial.print ("i:");
-    //    Serial.println (i);
+
     commandData = (receivedChars.substring(receivedChars.indexOf(",") + 1, receivedChars.indexOf("!"))).toInt();
-    //    Serial.println (receivedChars);
-    //    Serial.print("commandType:");
-    //    Serial.println(commandType);
-    //    Serial.print("commandData:");
-    //    Serial.println(commandData);
-    //    Serial.println("********* ind !");
-    //    Serial.println(receivedChars.indexOf("!"));
-    //    Serial.println("********* lenght");
-    //    Serial.println(receivedChars.length() - 1);
-    //    Serial.println("*********");
+
     cBuf.commandStack[cBuf.openSpot][0] = commandType;
     cBuf.commandStack[cBuf.openSpot][1] = commandData;
     if (receivedChars.indexOf("!") == receivedChars.length() - 1) {
       l = false;
-      //      Serial.println(F("Finished Adding Commands"));
+
     } else {
-      //      Serial.print ("rc bef:");
-      //      Serial.println (receivedChars);
+
       receivedChars = receivedChars.substring(receivedChars.indexOf("!") + 1);
       i = receivedChars;
-      //      Serial.print ("rc aft:");
-      //      Serial.println (receivedChars);
 
     }
     cBuf.openSpot++;
@@ -349,15 +347,25 @@ void recvWithEndMarker1() {
   static byte ndx = 0;
   char endMarker = '\n';
   char rc;
+  ////////////////////////////////////////////
+  Serial.print("Serial available:");
+  Serial.println(Serial1.available());
+  if (newData == true) {
+    Serial.println("Newdata = true");
+  } else {
+    Serial.println("Newdata = false");
+  }
+
+
+  ////////////////////////////////////////////
 
   while ( Serial1.available() > 0 && newData == false) {
     rc = Serial1.read();
-
     if (rc != endMarker) {
       receivedChars += (char(rc));
     }
     else {
-      commandParse();
+      newData = true;
     }
   }
 }
@@ -375,61 +383,63 @@ boolean isInputValid() {
     q++;
 
     if (l < 4) {
-      //Serial.println("command too short");
+      //      Serial.println("command too short");
       valid = false;
     }
     if (isPunct(currentChar)) {
       if (currentChar == (',')) {
         //Check if last was a period
-        //Serial.println("Comma Found");
+        //        Serial.println("Comma Found");
         if (receivedChars[q - 2] == '!') {
-          //Serial.println("No First Command Number");
+          //          Serial.println("No First Command Number");
           valid = false;
           break;
         }
         if (lastPunc == 0 || lastPunc == 2) {
-          //Serial.println("Comma OK");
+          //          Serial.println("Comma OK");
           lastPunc = 1;
         } else {
-          //Serial.println("2 Commas");
+          //          Serial.println("2 Commas");
           valid = false;
           break;
         }
       } else if (currentChar == ('!')) {
         if (receivedChars[q - 2] == ',') {
-          //Serial.println("No Second Command Number");
+          //          Serial.println("No Second Command Number");
           valid = false;
           break;
         }
-        //Serial.println("Excl Found");
+        //        Serial.println("Excl Found");
         if (lastPunc == 1) {
-          //Serial.println("Period ok");
+          //          Serial.println("Period ok");
           lastPunc = 2;
         } else {
-          //Serial.println("2 Excl or No prior comma");
+          //          Serial.println("2 Excl or No prior comma");
           valid = false;
           break;
         }
       } else if (currentChar == ('-')) {
-        //Serial.println("Hypen Found");
+        //        Serial.println("Hypen Found");
         if (receivedChars[q - 2] == ',') { //q incremented after value capture
-          //Serial.println("Negative Sign ok");
+          //          Serial.println("Negative Sign ok");
         } else {
-          //Serial.println("Hyphen in wrong place");
+          //          Serial.println("Hyphen in wrong place");
           valid = false;
           break;
         }
+      } else if (currentChar == ('.')) {
+        //        Serial.println("period ok");
       } else {
-        //Serial.println("Invalid Punc");
+        Serial.println("Invalid Punc");
         valid = false;
         break;
       }
     } else if (isAlpha(currentChar)) {
-      //Serial.println("Alpha");
+      //      Serial.println("Alpha");
       valid = false;
       break;
     } else if (isSpace(currentChar)) {
-      //Serial.println("Space");
+      //      Serial.println("Space");
       valid = false;
       break;
     }
@@ -437,23 +447,23 @@ boolean isInputValid() {
     //Detect no ending exclamation point
     if (q == receivedChars.length() - 1) {
       if (receivedChars[q] != '!') {
-        //Serial.println("No Ending");
+        //        Serial.println("No Ending");
         valid = false;
         break;
       }
     }
     //Null Character in the middle
     if (currentChar == '\0' && q != receivedChars.length() - 1) {
-      //Serial.println("null character");
+      //      Serial.println("null character");
       valid = false;
       break;
     }
   }
   if (valid) {
-    Serial.println("valid");
+    //    Serial.println("valid");
   }
   if (!valid) {
-    Serial.println("invalid");
+    //    Serial.println("invalid");
   }
   return valid;
 }
@@ -476,7 +486,7 @@ void popCommands() {
       //Supported Commands
       switch (currentCommand[0]) {
         case (1):
-          downLink();
+         
           break;
 
         case (2):
@@ -501,8 +511,7 @@ void popCommands() {
           break;
 
         case (5):
-          pinMode(13, OUTPUT);
-          digitalWrite(13, LOW);
+          Serial.println(currentCommand[1]);
           break;
 
         case (20): // 20 downlink commands
@@ -547,14 +556,17 @@ void popCommands() {
 
         case (100): // slave commands (this terminology is really due for an update)
           MSH.Gyro[0] = currentCommand[1];
+          Serial.println(currentCommand[1]);
           break;
 
         case (101):
           MSH.Gyro[1] = currentCommand[1];
+          Serial.println(MSH.Gyro[1]);
           break;
 
         case (102):
           MSH.Gyro[2] = currentCommand[1];
+          Serial.println(MSH.Gyro[2]);
           break;
 
         case (103):
@@ -599,8 +611,9 @@ void popCommands() {
 void setup() {
   //initialize
   Serial.begin (19200);
-  Serial1.begin (19200);
-  Wire.begin();
+  Serial1.begin (74880);
+  Serial2.begin (19200);
+  //Wire.begin();
   cBuf = commandBuffer();
 }
 
@@ -608,9 +621,11 @@ void loop() {
   //  wait 1 "tick" unit of time between sensor updates + new commands
   popCommands();
   recvWithEndMarker();
-  recvWithEndMarker1();
+  //recvWithEndMarker1();
   //tenatively working
+
   if (newData) {
+    Serial.print("receivedChars:");
     Serial.println(receivedChars);
     if (isInputValid() && (receivedChars != "")) {
       commandParse();
@@ -671,7 +686,7 @@ void MNormal() {
 ////////////Communication fucntions/////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////
 
-void downLink() {
+void stageDownLink() {
   long int i = micros();
   String msg = (MSH.toString()); // do i want to constrain values? maybe not
   MSH.lastSR++;
@@ -686,9 +701,10 @@ void downLink() {
     MSH.StageReport = false;
     MSH.lastSR = 0;
   }
-  //radiotransmit thing(msg); todo
+//  downLink(msg);
 
 }
+
 
 void sectionReadToValue(String s, int * data, int dataSize) {
   //Convert Array of Strings <s> to Array of ints <data> with size <dataSize>
