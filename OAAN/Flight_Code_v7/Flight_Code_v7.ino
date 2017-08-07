@@ -1,20 +1,27 @@
 
 
 //////////////////////////////////////////////////
-// Flight_Code_v6:
-// IMU averaging is now working properly.
-// It might make more sense to do this on the ACS board and trasfer the resultant data to the DUE
-// rudimentary Modecontroller now in place. 
-//
+// Flight_Code_v7:
+// Fault handling & complimetary functions now in place
+// improved command parse
+// added clock function
 //////////////////////////////////////////////////
+
+//todo i2c interface w/ acs comp, test rockblock functionality
+//run IMU, Binary parser, update MSH, Check in w/ ben?
+
+long day = 86400000; // 86400000 milliseconds in a day
+long hour = 3600000; // 3600000 milliseconds in an hour
+long minute = 60000; // 60000 milliseconds in a minute
+long second =  1000; // 1000 milliseconds in a second
 
 unsigned long manualTimeout = 10 * 1000;
 int endT = 0;
-unsigned long int z; //number of millis in current cycle
+unsigned long int z;//number of millis in current cycle
 int nextMode = 1; // mode of the spacecraft next cycle
-bool spintoofast = true; // delete, placeholder for real test
 
 const int SenseNumb = 10; //change number of data samples in averaging array
+const int faultSize = 10;
 bool SensUpdate = false; //is there fresh IMU data
 bool IMUBufferFull = false; //must fill w/ data before averages can be taken
 int SenseCounter = 0;
@@ -37,12 +44,11 @@ class masterStatus {
     //it is important that as few of these variables as possible get arbitrarily assigned a value.
     // these should only be given real data
 
-    // change final string to binary. get bytes.
-    // find upper and lower limits. round floats and set value for maxes (like MAX)
-
     int State;
     int NextState;
     int Faults; //number of faults detected over satellite lifetime
+    int activeFaults[faultSize];
+    String FaultString;
     bool DockingLeader; //docking requires leader and follower this can be toggled through commands
 
     //Fixed variables
@@ -253,6 +259,7 @@ class masterStatus {
       String output = "";
       output += "{";
       output += "Fl:" + String(Faults) + ",";
+      output += "FlSt:" + String(FaultString);
       output += "SRF:" + String(SRFreq) + ",";
       output += "XGT:" + String(XGyroThresh) + ",";
       output += "YGT:" + String(YGyroThresh) + ",";
@@ -334,7 +341,7 @@ void commandParse() {
 
 
 void recvWithEndMarker() {
-  // for serial0
+  // for serial
   static byte ndx = 0;
   char endMarker = '\n';
   char rc;
@@ -357,12 +364,19 @@ void recvWithEndMarker1() {
   char endMarker = '\n';
   char rc;
   ////////////////////////////////////////////
-  Serial.print("Serial available:");
-  Serial.println(Serial1.available());
+
   if (newData == true) {
-    Serial.println("Newdata = true");
-  } else {
-    Serial.println("Newdata = false");
+
+    while ( Serial1.available() > 0 && newData == false) {
+      rc = Serial1.read();
+
+      if (rc != endMarker) {
+        receivedChars += (char(rc));
+      }
+      else {
+        newData = true;
+      }
+    }
   }
 
 
@@ -387,14 +401,16 @@ boolean isInputValid() {
   bool valid = true;
   int q = 0;
   int l = receivedChars.length();
+
+  if (l < 4) {
+    //      Serial.println("command too short");
+    valid = false;
+  }
+
   while (q < l) {
     char currentChar = receivedChars[q];
     q++;
 
-    if (l < 4) {
-      //      Serial.println("command too short");
-      valid = false;
-    }
     if (isPunct(currentChar)) {
       if (currentChar == (',')) {
         //Check if last was a period
@@ -532,6 +548,14 @@ void popCommands() {
         case (22):
           break;
 
+        case (30): //toggle active fault //todo test this
+          if (MSH.activeFaults[currentCommand[1]] = 0) {
+            MSH.activeFaults[currentCommand[1]] = 1;
+          } else {
+            MSH.activeFaults[currentCommand[1]] = 0;
+          }
+          break;
+
         case (80): // 80 gyro commands
           MSH.XGyroThresh = currentCommand[1];
           MSH.StageReport = true;
@@ -600,6 +624,7 @@ void popCommands() {
 
         case (109):
           SensUpdate = true;
+          break;
       }
     } else {
       Serial.println("No Command");
@@ -620,11 +645,12 @@ void setup() {
   Serial2.begin (19200);
   //Wire.begin();
   cBuf = commandBuffer();
+  buildFaults();
 }
 
 void loop() {
 
-
+  delay(1000);
   ModeCon();
 
 
@@ -659,22 +685,22 @@ void ModeCon() {
       MSafeHold();
       break;
   }
-  Serial.println("////////////////////////////////////////");
-  Serial.print("cycle completed in ");
-  Serial.print(millis() - z);
-  Serial.println(" milliseconds");
-  Serial.println("////////////////////////////////////////");
+  // use to check cycle speed
+  //  Serial.println("////////////////////////////////////////");
+  //  Serial.print("cycle completed in ");
+  //  Serial.print(millis() - z);
+  //  Serial.println(" milliseconds");
+  //  Serial.println("////////////////////////////////////////");
 
 
 }
 
 void  MNormal() {
 
-  //  wait 1 "tick" unit of time between sensor updates + new commands
+  checkTime();
   popCommands();
   recvWithEndMarker();
-  //recvWithEndMarker1();
-  //tenatively working
+  recvWithEndMarker1();
   //initializeRB();
 
 
@@ -688,58 +714,103 @@ void  MNormal() {
     Serial.println("wiping serial buffer");
     receivedChars = "";
   }
-//////////////////// for testing
-  cBuf.commandStack[cBuf.openSpot][0] = 100;
-  cBuf.commandStack[cBuf.openSpot][1] = random(0, 1000);
-  cBuf.openSpot++;
+  ////////////////////// for testing sensor averaging
+  //  cBuf.commandStack[cBuf.openSpot][0] = 100;
+  //  cBuf.commandStack[cBuf.openSpot][1] = random(0, 1000);
+  //  cBuf.openSpot++;
+  //
+  //  cBuf.commandStack[cBuf.openSpot][0] = 101;
+  //  cBuf.commandStack[cBuf.openSpot][1] =  random(0, 1000);
+  //  cBuf.openSpot++;
+  //
+  //  cBuf.commandStack[cBuf.openSpot][0] = 102;
+  //  cBuf.commandStack[cBuf.openSpot][1] =  random(0, 1000);
+  //  cBuf.openSpot++;
+  //
+  //  cBuf.commandStack[cBuf.openSpot][0] = 109;
+  //  cBuf.commandStack[cBuf.openSpot][1] = 2;
+  //  cBuf.openSpot++;
+  ///////////////////////
 
-  cBuf.commandStack[cBuf.openSpot][0] = 101;
-  cBuf.commandStack[cBuf.openSpot][1] =  random(0, 1000);
-  cBuf.openSpot++;
-
-  cBuf.commandStack[cBuf.openSpot][0] = 102;
-  cBuf.commandStack[cBuf.openSpot][1] =  random(0, 1000);
-  cBuf.openSpot++;
-
-  cBuf.commandStack[cBuf.openSpot][0] = 109;
-  cBuf.commandStack[cBuf.openSpot][1] = 2;
-  cBuf.openSpot++;
-/////////////////////
-
-  // updateSensors();
-  if (SensUpdate) {
-
-    if (!IMUBufferFull) {
-      fillIMUBuffer();
-    }
-    else {
-      buildIMULog();
-      takeAverage();
-    }
-  }
+  //  // updateSensors();
+  //  if (SensUpdate) {
+  //
+  //    if (!IMUBufferFull) {
+  //      fillIMUBuffer();
+  //    }
+  //    else {
+  //      buildIMULog();
+  //      takeAverage();
+  //    }
+  //  }
 
 }
 
 
 void MDetumble() {
-  Serial.println ("yay im detumbling");
+  //Serial.println ("yay im detumbling");
   nextMode = 0;
 }
 
 void MSafeHold() {
-
+  //Serial.println("im safe AF right now");
 }
 
 void faultCheck() {
 
-  if (spintoofast) {
-    nextMode = 1;
-    spintoofast = false;
-  }
-  else {
-    nextMode = 0;
-  }
+  //Serial.println ("checking faults: ");
+  int f = 0;
+  bool fault = false;
 
+
+  while (f < faultSize) {
+
+    int CurInt = MSH.activeFaults[f];
+    //    Serial.print("current int: ");
+    //    Serial.println(CurInt);
+    //    Serial.print("current fault place: ");
+    //    Serial.println(f);
+    if (CurInt = 0) {
+      //ignore
+      //      Serial.println("ignoring");
+    } else {
+      //      Serial.println("hmm this seems highly important");
+
+      switch (f) {
+        case (1):
+          //          Serial.println("case 1 tripped");
+          if (MSH.Gyro[0] > MSH.XGyroThresh) {
+            fault = true;
+          }
+          break;
+        case (2):
+          //          Serial.println("case 2 tripped");
+          break;
+      }
+    }
+    f++;
+  }
+  if (fault) {
+    nextMode = 2; // enter safe hold mode
+  }
+}
+
+void buildFaults() {
+  int f = 0;
+  while (f < faultSize) {
+    MSH.activeFaults[f] = 1;
+    f++;
+  }
+}
+
+void FaultString() {
+  int f = 0;
+  String g = "";
+  while (f < faultSize) {
+    g += MSH.activeFaults[f];
+    f++;
+  }
+  MSH.FaultString = g;
 }
 
 ////////////////////////////////////////////////////////////////////////////
@@ -751,11 +822,13 @@ void faultCheck() {
 
 void stageDownLink() {
   long int i = micros();
+  checkTime();
   String msg = (MSH.toString()); // do i want to constrain values? maybe not
   MSH.lastSR++;
 
   if (MSH.lastSR > MSH.SRFreq) { // int can change based on how often you'd like special data.
     MSH.StageReport = true;
+    FaultString(); // update currently active faults
   }
   if (MSH.StageReport) {
     String u = "";
@@ -771,6 +844,44 @@ void stageDownLink() {
 ////////////////////////////////////////////////////////////////////////////
 ////////////////Sensor Functions////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////
+
+
+void checkTime() {
+  long timeNow = millis();
+  String timeString = "";
+
+  int days = timeNow / day ;//number of days
+  int hours = (timeNow % day) / hour;//the remainder from days division (in milliseconds) divided by hours, this gives the full hours
+  int minutes = ((timeNow % day) % hour) / minute ;//and so on...
+  int seconds = (((timeNow % day) % hour) % minute) / second;
+
+  // digital clock display of current time
+//  Serial.print(days, DEC);
+//  printDigits(hours);
+//  printDigits(minutes);
+//  printDigits(seconds);
+//  Serial.println();
+
+timeString += String(days,DEC) + ":";
+timeString += String(hours,DEC) + ":";
+timeString += String(minutes,DEC) + ":";
+timeString += String(seconds,DEC);
+
+Serial.println(timeString);
+
+}
+
+void printDigits(byte digits) {
+  // utility function for digital clock display: prints colon and leading 0
+  Serial.print(":");
+  if (digits < 10)
+    Serial.print('0');
+  Serial.print(digits, DEC);
+}
+
+
+
+
 
 bool checkSpin() {
   //return true if spin rate exceeds threshold
