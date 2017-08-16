@@ -95,7 +95,6 @@ class masterStatus {
     // may need to store the zeros aswell.
 
     //power board variables
-    //todo is there any more variables available that i may want?
     float Battery; // battery charge
 
     //ADCS State Variables: torque rods
@@ -168,7 +167,6 @@ class masterStatus {
     }
 
     String toString() {
-      //Produces JSON Output in ASCII for Printing and Downlink
       String output = "";
       output += "{";
       output += "S:" + String(State) + ",";
@@ -184,7 +182,6 @@ class masterStatus {
       output += "TYP:" + String(TorqueYPWM) + ",";
       output += "TZD:" + String(TorqueZDir) + ",";
       output += "TZP:" + String(TorqueZPWM) + ",";
-      //todo should motor "intensity" be RPM?
       output += "MXD:" + String(MotorXDir) + ",";
       output += "MXR:" + String(MotorXRPM) + ",";
       output += "MYD:" + String(MotorYDir) + ",";
@@ -649,11 +646,7 @@ void setup() {
 }
 
 void loop() {
-
-  delay(1000);
   ModeCon();
-
-
 }
 
 
@@ -757,8 +750,8 @@ void MSafeHold() {
 }
 
 void faultCheck() {
+  // reads fault string and checks that no threshold has been tripped
 
-  //Serial.println ("checking faults: ");
   int f = 0;
   bool fault = false;
 
@@ -766,25 +759,22 @@ void faultCheck() {
   while (f < faultSize) {
 
     int CurInt = MSH.activeFaults[f];
-    //    Serial.print("current int: ");
-    //    Serial.println(CurInt);
-    //    Serial.print("current fault place: ");
-    //    Serial.println(f);
+
     if (CurInt = 0) {
       //ignore
-      //      Serial.println("ignoring");
     } else {
-      //      Serial.println("hmm this seems highly important");
 
       switch (f) {
+
         case (1):
-          //          Serial.println("case 1 tripped");
+          //Serial.println("case 1 tripped");
           if (MSH.Gyro[0] > MSH.XGyroThresh) {
             fault = true;
           }
           break;
+
         case (2):
-          //          Serial.println("case 2 tripped");
+          //Serial.println("case 2 tripped");
           break;
       }
     }
@@ -851,23 +841,23 @@ void checkTime() {
   String timeString = "";
 
   int days = timeNow / day ;//number of days
-  int hours = (timeNow % day) / hour;//the remainder from days division (in milliseconds) divided by hours, this gives the full hours
+  int hours = (timeNow % day) / hour;
   int minutes = ((timeNow % day) % hour) / minute ;//and so on...
   int seconds = (((timeNow % day) % hour) % minute) / second;
 
   // digital clock display of current time
-//  Serial.print(days, DEC);
-//  printDigits(hours);
-//  printDigits(minutes);
-//  printDigits(seconds);
-//  Serial.println();
+  //  Serial.print(days, DEC);
+  //  printDigits(hours);
+  //  printDigits(minutes);
+  //  printDigits(seconds);
+  //  Serial.println();
 
-timeString += String(days,DEC) + ":";
-timeString += String(hours,DEC) + ":";
-timeString += String(minutes,DEC) + ":";
-timeString += String(seconds,DEC);
+  timeString += String(days, DEC) + ":";
+  timeString += String(hours, DEC) + ":";
+  timeString += String(minutes, DEC) + ":";
+  timeString += String(seconds, DEC);
 
-Serial.println(timeString);
+  Serial.println(timeString);
 
 }
 
@@ -882,21 +872,6 @@ void printDigits(byte digits) {
 
 
 
-
-bool checkSpin() {
-  //return true if spin rate exceeds threshold
-
-
-  // option 1:
-  //less control but faster and much more simple
-
-  //float totRot = MSH.
-
-  // option 2:
-  // more involved and slower. also more variables to keep track of
-  // individualy set and check each threshold. probably not necessary
-
-}
 
 float getAverage(float x, float y, float z) {
   // might just delete this. its pretty useless tbh :)
@@ -934,11 +909,6 @@ void takeAverage() {
 
       MAverage[j] += MSH.MagLog[j][i];
       GAverage[j] += MSH.GyroLog[j][i];
-      //      Serial.print("gyro log: ");
-      //      Serial.print (i);
-      //      Serial.print(" ");
-      //      Serial.println (j);
-      //      Serial.println(MSH.GyroLog[j][i]);
       AAverage[j] += MSH.AccelLog[j][i];
 
     }//close for i
@@ -976,7 +946,7 @@ void buildIMULog() {
       }
     }//close for i
 
-  }//close for jSerial.print(" ");
+  }//close for j;
 
   // very helpful for debugging
   // Serial.print(MSH.GyroLog[0][0]); Serial.print(" "); Serial.print(MSH.GyroLog[1][0]); Serial.print(" "); Serial.println(MSH.GyroLog[2][0]) ;

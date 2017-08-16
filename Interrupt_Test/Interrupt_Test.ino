@@ -1,3 +1,6 @@
+#include <Wire.h>
+#include <WireKinetis.h>
+
 
 /*
 MinIMU-9-Arduino-AHRS
@@ -20,6 +23,7 @@ more details.
 You should have received a copy of the GNU Lesser General Public License along
 with MinIMU-9-Arduino-AHRS. If not, see <http://www.gnu.org/licenses/>.
 */
+#define IMU_V5
 
 #ifdef IMU_V5
 
@@ -67,11 +71,6 @@ void Read_Gyro()
   AN[1] = gyro_acc.g.y;
   AN[2] = gyro_acc.g.z;
 #else
-  gyro.read();
-
-  AN[0] = gyro.g.x;
-  AN[1] = gyro.g.y;
-  AN[2] = gyro.g.z;
 #endif
 
   gyro_x = SENSOR_SIGN[0] * (AN[0] - AN_OFFSET[0]);
@@ -149,3 +148,12 @@ void Read_Compass()
   magnetom_z = SENSOR_SIGN[8] * compass.m.z;
 #endif
 }
+
+void setup() {
+  
+}
+
+void loop() {
+  
+}
+

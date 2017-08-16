@@ -1,9 +1,22 @@
-// this exact code has ran properly w/ the imu and acs teensy
+//worked on aug 8th
+
+//teensy to teensy comm still needs work, get IMU data transfer nice and clean todo
+//////////////////////////////////////////////////
+// Flight_Code_v8:
+//
+// partially finished changing dowlinking format from a string to binary int array
+//
+//////////////////////////////////////////////////
 
 //todo i2c interface w/ acs comp, test rockblock functionality, checktime, turn imu floats to ints
 //run IMU, Binary parser, update MSH, Check in w/ ben, safely reset millis
+
 long unsigned int deleteme = 0;
 
+long day = 86400000; // 86400000 milliseconds in a day
+long hour = 3600000; // 3600000 milliseconds in an hour
+long minute = 60000; // 60000 milliseconds in a minute
+long second =  1000; // 1000 milliseconds in a second
 
 unsigned long manualTimeout = 10 * 1000;
 int endT = 0;
@@ -530,20 +543,37 @@ void commandParse() {
 }
 
 
+
+void recvWithEndMarker() {
+  // for serial
+  static byte ndx = 0;
+  char endMarker = '\n';
+  char rc;
+
+  while ( Serial.available() > 0 && newData == false) {
+    rc = Serial.read();
+
+    if (rc != endMarker) {
+      receivedChars += (char(rc));
+    }
+    else {
+      newData = true;
+    }
+  }
+}
+
 void recvWithEndMarker1() {
   // for serial0
   static byte ndx = 0;
   char endMarker = '\n';
   char rc;
-  
+
   while ( Serial3.available() > 0 && newData == false) {
     rc = Serial3.read();
     if (rc != endMarker) {
       receivedChars += (char(rc));
-      digitalWrite(13,HIGH);
     }
     else {
-      digitalWrite(13,LOW);
       newData = true;
     }
   }
@@ -642,10 +672,10 @@ boolean isInputValid() {
     }
   }
   if (valid) {
-//    Serial.println("valid");
+    //Serial.println("valid");
   }
   if (!valid) {
-//    Serial.println("invalid");
+    //Serial.println("invalid");
   }
   return valid;
 }
@@ -821,8 +851,7 @@ void setup() {
   Serial3.begin (74880);
   //Wire.begin();
   cBuf = commandBuffer();
-  pinMode(13,OUTPUT);
-//  buildFaults();
+  buildFaults();
 }
 
 void loop() {
@@ -839,7 +868,7 @@ void loop() {
 
 void ModeCon() {
   z = millis();
-//  faultCheck();
+//  faultCheck(); activate when fault check is ready
 
   switch (nextMode) {
 
@@ -850,12 +879,12 @@ void ModeCon() {
 
     case 1:
       // detumble
-//      MDetumble();
+      MDetumble();
       break;
 
     case 2:
       // safe hold
-//      MSafeHold();
+      MSafeHold();
       break;
   }
   // use to check cycle speed
@@ -872,7 +901,8 @@ void  MNormal() {
   //  checkTime();
   popCommands();
 
-//  recvWithEndMarker();
+  recvWithEndMarker();
+
   recvWithEndMarker1();
 
   //initializeRB();
@@ -904,9 +934,7 @@ void  MNormal() {
   //  cBuf.openSpot++;
   ///////////////////////
 
-  //  // updateSensors();
-  //if (deleteme < millis()) {
-  //deleteme = (millis() + 1000);
+  // updateSensors();
   if (SensUpdate) {
     if (!IMUBufferFull) {
       fillIMUBuffer();
@@ -922,6 +950,155 @@ void  MNormal() {
   }
   //}
 
+}
+
+
+void MDetumble() {
+  //Serial.println ("yay im detumbling");
+  nextMode = 0;
+}
+
+void MSafeHold() {
+  //Serial.println("im safe AF right now");
+}
+
+void faultCheck() {
+  // reads fault string and checks that no threshold has been tripped
+
+  int f = 0;
+  bool fault = false;
+
+
+  while (f < faultSize) {
+
+    int CurInt = MSH.activeFaults[f];
+
+    if (CurInt = 0) {
+      //ignore
+    } else {
+
+      switch (f) {
+
+        case (1):
+          //Serial.println("case 1 tripped");
+          if (MSH.Gyro[0] > MSH.XGyroThresh) {
+            fault = true;
+          }
+          break;
+
+        case (2):
+          //Serial.println("case 2 tripped");
+          break;
+      }
+    }
+    f++;
+  }
+  if (fault) {
+    nextMode = 2; // enter safe hold mode
+  }
+}
+
+void buildFaults() {
+  int f = 0;
+  while (f < faultSize) {
+    MSH.activeFaults[f] = 1;
+    f++;
+  }
+}
+
+void FaultString() { //use as binary int array todo
+  int f = 0;
+  String g = "";
+  while (f < faultSize) {
+    g += MSH.activeFaults[f];
+    f++;
+  }
+  MSH.FaultString = g;
+}
+
+////////////////////////////////////////////////////////////////////////////
+////////////Communication fucntions/////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+
+// rockblock code is basically finished do not want to integrate quite yet. maybe once we have imu up & running?
+// do imu > teensy > Due > rockblock > webserivice transfer!
+
+void stageDownLink() { //rework downlink todo
+  long int i = micros();
+  //  checkTime();
+  String msg;
+  MSH.lastSR++;
+
+  if (MSH.lastSR > MSH.SRFreq) { // int can change based on how often you'd like special data.
+    MSH.StageReport = true;
+    FaultString(); // update currently active faults
+  }
+  if (MSH.StageReport) {
+    String u = "";
+    u += MSH.SpecialReport();
+    msg += u;
+    MSH.StageReport = false;
+    MSH.lastSR = 0;
+  }
+  //  downLink(msg);
+
+} void downLink() {
+  int a; //binary array length counter
+  int b; // checksum
+
+  // at sbdwb short burst data: write binary
+  // not finished
+  while (a < MSH.binOpenSpot) {
+    int c = MSH.binArr[a];
+    if (c == 0) {
+      Serial.print(0);
+    } else if (c == 1) {
+      Serial.print(1);
+      b++;
+    }
+    a++;
+  }
+  Serial.print("asd");
+  MSH.binOpenSpot = 0;
+
+}
+
+////////////////////////////////////////////////////////////////////////////
+////////////////Sensor Functions////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+
+
+void checkTime() { //todo
+  long timeNow = millis();
+  String timeString = "";
+
+  int days = timeNow / day ;//number of days
+  int hours = (timeNow % day) / hour;
+  int minutes = ((timeNow % day) % hour) / minute ;//and so on...
+  int seconds = (((timeNow % day) % hour) % minute) / second;
+
+  // digital clock display of current time
+  //  Serial.print(days, DEC);
+  //  printDigits(hours);
+  //  printDigits(minutes);
+  //  printDigits(seconds);
+  //  Serial.println();
+
+  timeString += String(days, DEC) + ":";
+  timeString += String(hours, DEC) + ":";
+  timeString += String(minutes, DEC) + ":";
+  timeString += String(seconds, DEC);
+
+  Serial.println(timeString);
+
+}
+
+void printDigits(byte digits) {
+  // utility function for digital clock display: prints colon and leading 0
+  Serial.print(":");
+  if (digits < 10)
+    Serial.print('0');
+  Serial.print(digits, DEC);
 }
 
 void fillIMUBuffer() {
